@@ -1,0 +1,1 @@
+# manual_studio_qt5
