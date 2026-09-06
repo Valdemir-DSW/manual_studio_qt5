@@ -1,8 +1,10 @@
 import os
+import sys
+import subprocess
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QSettings
-from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt, QSettings, QUrl
+from PyQt5.QtGui import QIcon, QDesktopServices
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
@@ -39,6 +41,15 @@ from .ui_extras import (
 
 
 ROLE_TOPIC_ID = Qt.UserRole + 1
+
+
+def bundled_htmlhelp_installer() -> Path:
+    if hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "prereqs" / "htmlhelp.exe"
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "prereqs" / "htmlhelp.exe"
+    return Path(__file__).resolve().parent.parent / "prereqs" / "htmlhelp.exe"
+
 
 
 class MainWindow(QMainWindow):
@@ -298,6 +309,10 @@ class MainWindow(QMainWindow):
         chm_compiler = QAction("Configurar compilador CHM...", self)
         chm_compiler.triggered.connect(self.configure_hhc)
         tools.addAction(chm_compiler)
+        install_chm = QAction("Instalar compilador CHM incluído...", self)
+        install_chm.setToolTip("Instala o Microsoft HTML Help Workshop 1.3 incluído com o Manual Studio")
+        install_chm.triggered.connect(self.install_bundled_hhc)
+        tools.addAction(install_chm)
         tools.addSeparator()
         tools.addAction("Remover fundo da imagem selecionada...", self.editor.remove_selected_image_background)
 
@@ -307,6 +322,11 @@ class MainWindow(QMainWindow):
         help_file.triggered.connect(lambda: open_help_file(self))
         help_menu.addAction(help_file)
         help_menu.addAction("Abrir arquivo .ajuda...", lambda: choose_and_open_help(self))
+        help_menu.addSeparator()
+        github_act = QAction("Manual Studio no GitHub...", self)
+        github_act.setToolTip("Página oficial do Manual Studio: código, downloads e atualizações")
+        github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/Valdemir-DSW/manual_studio_qt5")))
+        help_menu.addAction(github_act)
         help_menu.addSeparator()
         about = QAction("Sobre", self)
         about.triggered.connect(self.show_about)
@@ -859,6 +879,47 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ajuda binária", f"Falha ao gerar .ajuda.\n\n{e}")
 
+    def install_bundled_hhc(self) -> bool:
+        existing = find_hhc(self.settings.value("hhc_path", "", type=str))
+        if existing:
+            self.settings.setValue("hhc_path", existing)
+            QMessageBox.information(self, "Compilador CHM", "O HTML Help Workshop já está instalado.\n\n" + existing)
+            return True
+
+        installer = bundled_htmlhelp_installer()
+        if not installer.is_file():
+            QMessageBox.warning(self, "Compilador CHM", "O instalador incluído não foi encontrado.\n\n" + str(installer))
+            return False
+
+        answer = QMessageBox.question(
+            self, "Instalar compilador CHM",
+            "O exportador CHM usa o Microsoft HTML Help Workshop (hhc.exe).\n\n"
+            "Deseja executar agora o instalador incluído com o Manual Studio?\n\n"
+            "Ele pode solicitar permissões do Windows.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+        )
+        if answer != QMessageBox.Yes:
+            return False
+
+        try:
+            subprocess.run([str(installer)], check=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Compilador CHM", f"Não foi possível executar o instalador.\n\n{e}")
+            return False
+
+        found = find_hhc("")
+        if found:
+            self.settings.setValue("hhc_path", found)
+            QMessageBox.information(self, "Compilador CHM", "HTML Help Workshop detectado com sucesso.\n\n" + found)
+            return True
+
+        QMessageBox.warning(
+            self, "Compilador CHM",
+            "O instalador foi encerrado, mas o hhc.exe ainda não foi localizado.\n\n"
+            "Se você usou uma pasta personalizada, configure o hhc.exe manualmente."
+        )
+        return False
+
     def configure_hhc(self):
         current = self.settings.value("hhc_path", "", type=str)
         start = current if current else ""
@@ -877,12 +938,24 @@ class MainWindow(QMainWindow):
             path += ".chm"
         configured = self.settings.value("hhc_path", "", type=str)
         if not find_hhc(configured):
+            installer = bundled_htmlhelp_installer()
+            if installer.is_file():
+                answer = QMessageBox.question(
+                    self, "Compilador CHM",
+                    "O hhc.exe não foi encontrado. O Manual Studio inclui o instalador do "
+                    "Microsoft HTML Help Workshop. Deseja instalá-lo agora?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+                )
+                if answer == QMessageBox.Yes:
+                    self.install_bundled_hhc()
+                    configured = self.settings.value("hhc_path", "", type=str)
+
+        if not find_hhc(configured):
             answer = QMessageBox.question(
-                self,
-                "Compilador CHM",
-                "O hhc.exe do Microsoft HTML Help Workshop não foi encontrado. Deseja selecionar o executável agora?\n\nSe escolher Não, o Manual Studio ainda gerará o projeto .hhp/.hhc para compilação posterior.",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
+                self, "Compilador CHM",
+                "O hhc.exe ainda não foi localizado. Deseja selecionar um hhc.exe manualmente?\n\n"
+                "Se escolher Não, o projeto .hhp/.hhc será gerado para compilação posterior.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
             )
             if answer == QMessageBox.Yes:
                 self.configure_hhc()
@@ -903,9 +976,10 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "Manual Studio Qt5",
-            "Manual Studio Qt5 — v7\n\nEditor de manuais técnicos em Python + PyQt5.\n"
+            "Manual Studio Qt5 — v9.3\n\nEditor de manuais técnicos em Python + PyQt5.\n"
             "Exporta HTML, PDF e projetos CHM e possui ajuda própria em formato .ajuda.\n\n"
-            "O CHM é compilado pelo Microsoft HTML Help Workshop (hhc.exe) quando disponível.",
+            "O CHM usa páginas HTML simplificadas e é compilado pelo Microsoft HTML Help Workshop (hhc.exe).\n\n"
+            "Projeto oficial: https://github.com/Valdemir-DSW/manual_studio_qt5",
         )
 
     def closeEvent(self, event):

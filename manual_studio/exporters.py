@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import unicodedata
 from datetime import date
 from pathlib import Path
 from typing import Dict, Optional, Tuple, List
@@ -82,6 +83,7 @@ def topic_file_map(project) -> Dict[str, str]:
 
 
 def css_text(project=None) -> str:
+    """CSS base do WebHelp com layout consistente e totalmente sobrescrevível."""
     meta = project.meta if project else {}
     family = html.escape(str(meta.get("body_font_family", "Arial")), quote=True)
     body = float(meta.get("body_font_size_pt", 10.5))
@@ -95,75 +97,83 @@ def css_text(project=None) -> str:
     fg = str(meta.get("html_text", "#1f2933"))
     side = str(meta.get("html_sidebar_background", "#f5f7fa"))
     topbar = str(meta.get("html_topbar_background", "#ffffff"))
-    sidebar = max(180, min(520, int(meta.get("html_sidebar_width_px", 300))))
-    content = max(520, min(1600, int(meta.get("html_content_width_px", 900))))
+    sidebar = max(240, min(560, int(meta.get("html_sidebar_width_px", 340))))
+    content = max(560, min(1800, int(meta.get("html_content_width_px", 1040))))
     tree_lines = bool(meta.get("html_tree_lines", True))
     custom = str(meta.get("html_custom_css", "") or "")
-    branch_guide = "border-left:1px solid var(--tree-line);padding-left:12px;margin-left:6px;" if tree_lines else "padding-left:12px;"
+    branch_guide = "border-left:1px solid var(--tree-line);padding-left:9px;margin-left:11px;" if tree_lines else "padding-left:9px;margin-left:11px;"
     base = f"""
-:root {{ --bg:{bg}; --fg:{fg}; --muted:#697386; --line:#d8dee6; --tree-line:#cfd6dd; --accent:{accent}; --side:{side}; --topbar:{topbar}; }}
+:root {{
+  --bg:{bg}; --fg:{fg}; --muted:#667085; --line:#d8dee7; --tree-line:#ccd4df;
+  --accent:{accent}; --side:{side}; --topbar:{topbar}; --surface:{bg}; --surface-soft:{side};
+  --sidebar-width:{sidebar}px; --content-width:{content}px; --topbar-height:64px;
+}}
 * {{ box-sizing:border-box; }}
 html, body {{ min-height:100%; }}
+html {{ background:var(--bg); }}
 body {{ margin:0; font-family:'{family}', Arial, Helvetica, sans-serif; font-size:{body}pt; color:var(--fg); background:var(--bg); line-height:{line_height:.2f}; }}
 p {{ margin-top:0; margin-bottom:{paragraph}pt; overflow-wrap:anywhere; }}
 a {{ color:var(--accent); }}
 .site-shell {{ min-height:100vh; display:flex; flex-direction:column; }}
-.topbar {{ flex:0 0 auto; min-height:58px; display:flex; align-items:center; justify-content:space-between; gap:18px; padding:9px 22px; background:var(--topbar); border-bottom:1px solid var(--line); }}
-.topbar-brand {{ display:flex; align-items:center; gap:10px; min-width:0; color:var(--fg); text-decoration:none; font-weight:700; }}
-.topbar-brand img {{ width:34px; height:34px; object-fit:contain; margin:0; }}
+.topbar {{ position:sticky; top:0; z-index:30; flex:0 0 auto; min-height:var(--topbar-height); display:flex; align-items:center; justify-content:space-between; gap:18px; padding:10px 22px; background:var(--topbar); border-bottom:1px solid var(--line); }}
+.topbar-brand {{ display:flex; align-items:center; gap:11px; min-width:0; color:var(--fg); text-decoration:none; font-weight:700; letter-spacing:.005em; }}
+.topbar-brand img {{ width:36px; height:36px; object-fit:contain; margin:0; }}
 .topbar-title {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
 .language-control {{ display:flex; align-items:center; gap:7px; font-size:9pt; color:var(--muted); white-space:nowrap; }}
-.language-control select {{ width:auto; min-width:118px; padding:7px 28px 7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--fg); }}
-.layout {{ display:flex; flex:1 1 auto; min-height:0; }}
-.sidebar {{ width:{sidebar}px; flex:0 0 {sidebar}px; background:var(--side); border-right:1px solid var(--line); padding:20px 16px; overflow:auto; }}
-.sidebar-head {{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; font-weight:700; }}
+.language-control select {{ min-width:126px; padding:7px 30px 7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }}
+.layout {{ display:flex; flex:1 1 auto; min-height:calc(100vh - var(--topbar-height)); align-items:stretch; }}
+.sidebar {{ width:var(--sidebar-width); flex:0 0 var(--sidebar-width); background:var(--side); border-right:1px solid var(--line); padding:18px 12px 24px; overflow:auto; }}
+.sidebar-head {{ margin:0 8px 10px; font-size:9pt; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.055em; }}
 .sidebar ul {{ list-style:none; margin:0; padding-left:0; }}
-.sidebar li {{ margin:3px 0; min-width:0; }}
-.sidebar a {{ color:var(--fg); text-decoration:none; border-radius:5px; padding:5px 7px; display:inline-block; max-width:100%; overflow-wrap:anywhere; }}
-.sidebar a:hover {{ text-decoration:underline; }}
-.sidebar a.current {{ color:var(--accent); font-weight:700; }}
-.tree-branch {{ margin:2px 0; }}
-.tree-branch > summary {{ cursor:pointer; list-style:none; display:flex; align-items:center; gap:4px; }}
+.sidebar li {{ margin:2px 0; min-width:0; }}
+.sidebar a {{ color:var(--fg); text-decoration:none; border-radius:8px; padding:7px 9px; display:block; width:100%; overflow-wrap:anywhere; line-height:1.28; }}
+.sidebar a:hover {{ background:rgba(80,110,140,.09); }}
+.sidebar a.current {{ color:var(--accent); font-weight:700; background:rgba(80,110,140,.13); }}
+.tree-branch {{ margin:1px 0; }}
+.tree-branch > summary {{ cursor:pointer; list-style:none; display:grid; grid-template-columns:16px minmax(0,1fr); align-items:start; gap:2px; }}
 .tree-branch > summary::-webkit-details-marker {{ display:none; }}
-.tree-branch > summary::before {{ content:'›'; width:12px; color:var(--muted); }}
+.tree-branch > summary::before {{ content:'›'; width:14px; padding-top:7px; color:var(--muted); text-align:center; transition:transform .12s ease; }}
 .tree-branch[open] > summary::before {{ transform:rotate(90deg); }}
+.tree-branch > summary > .tree-link {{ font-weight:600; padding-left:4px; }}
 .tree-children {{ {branch_guide} }}
-.tree-leaf {{ padding-left:16px; }}
-.auto-toc {{ margin-top:18px; }}
-.auto-toc-row {{ padding:7px 0; border-bottom:1px dotted var(--line); }}
+.tree-leaf {{ padding-left:18px; }}
+.sidebar > .tree-leaf {{ padding-left:0; }}
+.auto-toc {{ margin-top:18px; border-top:1px solid var(--line); }}
+.auto-toc-row {{ padding:9px 6px; border-bottom:1px dotted var(--line); }}
 .auto-toc-row a {{ text-decoration:none; }}
-.content {{ width:min({content}px, calc(100% - {sidebar}px)); max-width:{content}px; margin:0 auto; padding:34px 48px 24px; display:flex; flex-direction:column; min-height:100%; }}
-.topic-main {{ flex:1 0 auto; }}
-h1 {{ font-size:{h1}pt; margin:0 0 20px; border-bottom:1px solid var(--line); padding-bottom:12px; }}
-h2 {{ font-size:{h2}pt; margin-top:30px; }}
-h3 {{ font-size:{h3}pt; margin-top:24px; }}
+.content {{ flex:1 1 auto; min-width:0; width:auto; max-width:var(--content-width); margin:0 auto; padding:38px 52px 28px; display:flex; flex-direction:column; min-height:calc(100vh - var(--topbar-height)); }}
+.topic-main {{ flex:1 0 auto; min-width:0; }}
+h1 {{ font-size:{h1}pt; line-height:1.14; margin:0 0 22px; border-bottom:1px solid var(--line); padding-bottom:13px; letter-spacing:-.01em; }}
+h2 {{ font-size:{h2}pt; line-height:1.2; margin-top:30px; }}
+h3 {{ font-size:{h3}pt; line-height:1.25; margin-top:24px; }}
 img {{ max-width:100%; height:auto; }}
 table {{ border-collapse:collapse; max-width:100%; }}
-td, th {{ border:1px solid var(--line); padding:7px 9px; vertical-align:top; }}
-pre {{ margin:12px 0 18px; padding:13px 15px; border:1px solid var(--line); border-radius:6px; background:var(--side); color:var(--fg); overflow:auto; white-space:pre; font-family:Consolas,'Cascadia Mono','Courier New',monospace; font-size:.94em; line-height:1.45; }}
+td, th {{ border:1px solid var(--line); padding:8px 10px; vertical-align:top; }}
+pre {{ margin:12px 0 18px; padding:14px 16px; border:1px solid var(--line); border-radius:9px; background:var(--surface-soft); color:var(--fg); overflow:auto; white-space:pre; font-family:Consolas,'Cascadia Mono','Courier New',monospace; font-size:.94em; line-height:1.45; }}
 code {{ font-family:Consolas,'Cascadia Mono','Courier New',monospace; }}
-:not(pre) > code {{ padding:1px 4px; border-radius:4px; background:var(--side); }}
-.footer, .site-footer, .footer-slot {{ margin-top:auto; padding:12px 0 0; border-top:1px solid var(--line); color:var(--muted); font-size:9pt; }}
+:not(pre) > code {{ padding:1px 5px; border-radius:5px; background:var(--surface-soft); }}
+.footer, .site-footer, .footer-slot {{ margin-top:auto; padding:15px 0 0; border-top:1px solid var(--line); color:var(--muted); font-size:9pt; }}
 .manual-hf {{ width:100%; display:block; overflow:hidden; flex:0 0 auto; }}
 .manual-hf table {{ width:100%; border:0; }}
 .manual-hf td, .manual-hf th {{ border:0; padding:0; vertical-align:middle; }}
-.manual-header {{ margin-bottom:18px; }}
+.manual-header {{ margin-bottom:20px; }}
 .manual-footer {{ margin-top:auto; padding-top:18px; }}
-.intro-page {{ flex:1 1 auto; width:min({content}px, calc(100% - 36px)); max-width:{content}px; margin:0 auto; padding:48px 36px 24px; display:flex; flex-direction:column; }}
-.intro-hero {{ padding:12px 0 26px; }}
-.intro-hero img {{ max-height:90px; max-width:260px; margin-bottom:22px; }}
-.intro-actions {{ margin:22px 0; display:flex; flex-wrap:wrap; gap:10px; }}
-.intro-actions a {{ display:inline-block; padding:9px 13px; border-radius:7px; background:var(--accent); color:#fff; text-decoration:none; }}
-.intro-tree {{ margin-top:10px; padding:18px; background:var(--side); border:1px solid var(--line); border-radius:8px; }}
-.intro-tree .tree-list {{ list-style:none; padding-left:0; margin:0; }}
-.intro-tree a {{ color:var(--fg); text-decoration:none; }}
+.intro-page {{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }}
+.intro-hero {{ flex:1 0 auto; padding:4px 0 26px; max-width:860px; }}
+.intro-hero h1 {{ font-size:27pt; margin-bottom:18px; }}
+.intro-subtitle {{ margin:-6px 0 18px; color:var(--muted); font-size:1.08em; }}
+.intro-hero img {{ max-height:92px; max-width:260px; margin-bottom:22px; }}
+.intro-actions {{ margin:22px 0 4px; display:flex; flex-wrap:wrap; gap:10px; }}
+.intro-actions a {{ display:inline-flex; align-items:center; gap:7px; padding:9px 14px; border-radius:8px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; }}
+.intro-actions a::before {{ content:'☰'; font-size:.92em; }}
+.intro-tree {{ display:none; }}
 .lang-content {{ display:none; }}
 .lang-content.active {{ display:block; }}
 span.lang-content.active {{ display:inline; }}
 @media (max-width:800px) {{
-  .topbar {{ padding:8px 12px; }} .lang-label {{ display:none; }} .language-control select{{min-width:96px}}
-  .layout{{display:block}} .sidebar{{width:100%;border-right:0;border-bottom:1px solid var(--line);max-height:none}}
-  .content{{width:100%;max-width:none;padding:26px 20px}} .intro-page{{width:100%;padding:30px 20px}}
+  .topbar {{ position:static; padding:8px 12px; }} .lang-label {{ display:none; }} .language-control select{{min-width:96px}}
+  .layout{{display:block;min-height:auto}} .sidebar{{width:100%;max-height:none;border-right:0;border-bottom:1px solid var(--line)}}
+  .content{{width:100%;max-width:none;min-height:calc(100vh - var(--topbar-height));padding:28px 20px}}
 }}
 """.strip()
     return base + ("\n\n/* CSS personalizado */\n" + custom if custom.strip() else "")
@@ -285,22 +295,43 @@ def _web_band_html(project, section: str, topic=None, asset_prefix="../assets/",
     return f'<div class="manual-hf manual-{section}" style="{";".join(styles)}">{fragment}</div>'
 
 
-def _language_script(default_lang: str) -> str:
+def _language_script(default_lang: str, storage_key: str = "manual-language") -> str:
+    """Aplica idioma sem permitir que uma preferência de outro manual oculte todo o conteúdo."""
+    safe_default = str(default_lang).replace("'", "\\'")
+    safe_key = str(storage_key).replace("'", "\\'")
     return f"""(function(){{
+  var fallback = '{safe_default}';
+  var key = '{safe_key}';
+  function available(){{
+    var values = [];
+    document.querySelectorAll('[data-lang]').forEach(function(el){{
+      var v = el.getAttribute('data-lang');
+      if (v && values.indexOf(v) < 0) values.push(v);
+    }});
+    document.querySelectorAll('.language-select option').forEach(function(opt){{
+      if (opt.value && values.indexOf(opt.value) < 0) values.push(opt.value);
+    }});
+    return values;
+  }}
   function apply(lang){{
-    document.documentElement.setAttribute('lang', lang);
+    var values = available();
+    if (values.length && values.indexOf(lang) < 0) lang = values.indexOf(fallback) >= 0 ? fallback : values[0];
+    document.documentElement.setAttribute('lang', lang || fallback);
     document.querySelectorAll('.lang-content').forEach(function(el){{
       el.classList.toggle('active', el.getAttribute('data-lang') === lang);
     }});
-    document.querySelectorAll('.language-select').forEach(function(sel){{ sel.value = lang; }});
-    try {{ localStorage.setItem('manual-language', lang); }} catch(e) {{}}
+    document.querySelectorAll('.language-select').forEach(function(sel){{
+      if ([].some.call(sel.options,function(o){{return o.value===lang;}})) sel.value = lang;
+    }});
+    try {{ localStorage.setItem(key, lang); }} catch(e) {{}}
+    return lang;
   }}
-  var initial = '{default_lang}';
-  try {{ initial = localStorage.getItem('manual-language') || initial; }} catch(e) {{}}
+  var initial = fallback;
+  try {{ initial = localStorage.getItem(key) || fallback; }} catch(e) {{}}
+  initial = apply(initial);
   document.querySelectorAll('.language-select').forEach(function(sel){{
     sel.addEventListener('change', function(){{ apply(this.value); }});
   }});
-  apply(initial);
 }})();"""
 
 
@@ -428,7 +459,6 @@ def build_html_preview_document(project, meta_override=None, current_topic_id=No
     version = html.escape(str(preview_project.meta.get("version", "")))
     author = html.escape(str(preview_project.meta.get("author", "")))
     footer_text = html.escape(str(preview_project.meta.get("footer_text", "")))
-    project_url = str(preview_project.meta.get("html_project_url", "") or "").strip()
 
     logo_id = preview_project.meta.get("logo_asset", "")
     brand_logo = ""
@@ -455,8 +485,6 @@ def build_html_preview_document(project, meta_override=None, current_topic_id=No
         intro_bits.append(intro_body)
     if bool(preview_project.meta.get("html_intro_show_toc", True)) and toc_enabled:
         intro_bits.append(f'<div class="intro-actions"><a class="preview-nav" href="#" data-page="toc">{html.escape(str(preview_project.meta.get("html_toc_title", "Sumário")))}</a></div>')
-    if project_url and bool(preview_project.meta.get("html_show_project_link", True)):
-        intro_bits.append(f'<p class="project-link"><a target="_blank" rel="noopener" href="{html.escape(project_url, quote=True)}">Projeto / suporte</a></p>')
     pages.append('<section class="preview-page" data-page-id="intro"><div class="topic-main intro-hero">' + ''.join(intro_bits) + '</div><div class="site-footer">' + footer_text + '</div></section>')
 
     if toc_enabled:
@@ -479,8 +507,8 @@ def build_html_preview_document(project, meta_override=None, current_topic_id=No
         pages.append(f'<section class="preview-page" data-page-id="topic-{topic.id}">{"".join(headers)}<div class="topic-main"><h1>{lang_spans(topic)}</h1>{lang_spans(topic, content=True)}</div>{"".join(footers)}</section>')
 
     initial = f"topic-{current_topic.id}" if current_topic is not None else ("intro" if bool(preview_project.meta.get("html_intro_enabled", True)) else "toc")
-    preview_css = css_text(preview_project) + "\n.preview-page{display:none;flex:1 1 auto;min-height:calc(100vh - 88px);flex-direction:column}.preview-page.active{display:flex}.project-link{margin-top:18px}.preview-banner{font-size:8.5pt;color:var(--muted);padding:4px 10px;border-bottom:1px dashed var(--line);background:var(--side)}"
-    script = _language_script(default_lang) + f"""
+    preview_css = css_text(preview_project) + "\n.preview-page{display:none;flex:1 1 auto;min-height:calc(100vh - 92px);flex-direction:column}.preview-page.active{display:flex}.preview-banner{font-size:8.5pt;color:var(--muted);padding:5px 12px;border-bottom:1px dashed var(--line);background:var(--side)}body.preview-mode .layout{display:flex!important}body.preview-mode .sidebar{width:var(--sidebar-width)!important;flex:0 0 var(--sidebar-width)!important;border-right:1px solid var(--line)!important;border-bottom:0!important}body.preview-mode .content{width:auto!important;max-width:none!important;padding:28px 32px!important}"
+    script = _language_script(default_lang, "manual-preview-language:" + slugify(str(preview_project.meta.get("title", "manual")))) + f"""
 (function(){{
   function showPage(id){{
     document.querySelectorAll('.preview-page').forEach(function(p){{p.classList.toggle('active', p.getAttribute('data-page-id')===id);}});
@@ -490,7 +518,7 @@ def build_html_preview_document(project, meta_override=None, current_topic_id=No
   showPage({initial!r});
 }})();
 """
-    return f'''<!doctype html><html lang="{html.escape(default_lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>{preview_css}</style></head><body><div class="site-shell"><header class="topbar">{brand}{language_select}</header><div class="preview-banner">Pré-compilação em RAM • nenhuma pasta temporária é criada</div><div class="layout"><nav class="sidebar">{"".join(nav)}</nav><article class="content">{"".join(pages)}</article></div></div><script>{script}</script></body></html>'''
+    return f'''<!doctype html><html lang="{html.escape(default_lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>{preview_css}</style></head><body class="preview-mode"><div class="site-shell"><header class="topbar">{brand}{language_select}</header><div class="preview-banner">Pré-compilação em RAM • nenhuma pasta temporária é criada</div><div class="layout"><nav class="sidebar">{"".join(nav)}</nav><article class="content">{"".join(pages)}</article></div></div><script>{script}</script></body></html>'''
 
 def export_html(project, output_dir: str, create_subfolder: bool = True):
     """Exporta o WebHelp.
@@ -516,7 +544,7 @@ def export_html(project, output_dir: str, create_subfolder: bool = True):
 
     languages = project.languages() if hasattr(project, "languages") else [project.meta.get("language", "pt-BR")]
     default_lang = str(project.meta.get("language", languages[0]))
-    (out / "language.js").write_text(_language_script(default_lang), encoding="utf-8")
+    (out / "language.js").write_text(_language_script(default_lang, "manual-language:" + slugify(str(project.meta.get("title", "manual")))), encoding="utf-8")
     mapping = topic_file_map(project)
     title_raw = str(project.meta.get("title", "Manual"))
     title = html.escape(title_raw)
@@ -550,14 +578,12 @@ def export_html(project, output_dir: str, create_subfolder: bool = True):
         intro_bits.append(intro_body)
     if bool(project.meta.get("html_intro_show_toc", True)) and toc_enabled:
         intro_bits.append('<div class="intro-actions"><a href="sumario.html">' + html.escape(str(project.meta.get("html_toc_title", "Sumário"))) + '</a></div>')
-    project_url = str(project.meta.get("html_project_url", "") or "").strip()
-    if project_url and bool(project.meta.get("html_show_project_link", True)):
-        intro_bits.append('<p class="project-link"><a target="_blank" rel="noopener" href="' + html.escape(project_url, quote=True) + '">Projeto / suporte</a></p>')
 
     if bool(project.meta.get("html_intro_enabled", True)):
-        index_main = '<main class="intro-page"><section class="intro-hero">' + ''.join(intro_bits) + '</section><section class="intro-tree">' + root_tree + '</section>' + (f'<div class="site-footer">{footer}</div>' if footer else '<div class="site-footer"></div>') + '</main>'
+        index_content = '<section class="topic-main intro-hero">' + ''.join(intro_bits) + '</section>'
     else:
-        index_main = '<main class="intro-page"><section class="intro-tree">' + root_tree + '</section><div class="site-footer">' + footer + '</div></main>'
+        index_content = '<section class="topic-main"><h1>' + title + '</h1></section>'
+    index_main = '<div class="layout"><nav class="sidebar">' + root_tree + '</nav><main class="content intro-page">' + index_content + '<div class="site-footer">' + footer + '</div></main></div>'
     index = f'''<!doctype html><html lang="{html.escape(default_lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title>{_web_favicon(project, "assets/")}<link rel="stylesheet" href="style.css"></head>
 <body><div class="site-shell">{topbar}{index_main}</div><script src="language.js"></script></body></html>'''
     (out / "index.html").write_text(index, encoding="utf-8")
@@ -567,14 +593,18 @@ def export_html(project, output_dir: str, create_subfolder: bool = True):
         legacy_toc = next((t for t in project.topics if getattr(t, "kind", "normal") == "toc"), None)
         toc_variants = []
         for lang in languages:
-            cls = "lang-content active" if lang == default_lang else "lang-content"
             toc_title = html.escape(str(project.meta.get("html_toc_title", "Sumário")))
             desc = html.escape(str(project.meta.get("html_toc_description", "")))
             legacy = ""
             if legacy_toc is not None:
                 legacy = replace_asset_urls(body_fragment(project.topic_html(legacy_toc, lang) if hasattr(project, "topic_html") else legacy_toc.html), project, "assets/")
             desc_html = f'<p>{desc}</p>' if desc else ''
-            toc_variants.append(f'<div class="{cls}" data-lang="{html.escape(lang)}"><h1>{toc_title}</h1>{desc_html}{legacy}{_web_toc_html(project, mapping, lang, "topics/")}</div>')
+            content_html = f'<h1>{toc_title}</h1>{desc_html}{legacy}{_web_toc_html(project, mapping, lang, "topics/")}'
+            if len(languages) <= 1:
+                toc_variants.append(content_html)
+            else:
+                cls = "lang-content active" if lang == default_lang else "lang-content"
+                toc_variants.append(f'<div class="{cls}" data-lang="{html.escape(lang)}">{content_html}</div>')
         toc_page = f'''<!doctype html><html lang="{html.escape(default_lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(str(project.meta.get("html_toc_title", "Sumário")))} — {title}</title>{_web_favicon(project, "assets/")}<link rel="stylesheet" href="style.css"></head>
 <body><div class="site-shell"><header class="topbar">{_web_brand(project, "index.html", "assets/")}{_language_select(project)}</header><div class="layout"><nav class="sidebar">{nav_html(project, mapping, prefix="topics/", multilingual=True, toc_href="sumario.html")}</nav><article class="content"><div class="topic-main">{''.join(toc_variants)}</div><div class="site-footer">{footer}</div></article></div></div><script src="language.js"></script></body></html>'''
         (out / "sumario.html").write_text(toc_page, encoding="utf-8")
@@ -586,11 +616,19 @@ def export_html(project, output_dir: str, create_subfolder: bool = True):
         for lang in languages:
             topic_title = project.topic_title(topic, lang) if hasattr(project, "topic_title") else topic.title
             fragment = replace_asset_urls(body_fragment(project.topic_html(topic, lang) if hasattr(project, "topic_html") else topic.html), project, "../assets/")
-            cls = "lang-content active" if lang == default_lang else "lang-content"
-            titles.append(f'<span class="{cls}" data-lang="{html.escape(lang)}">{html.escape(topic_title)}</span>')
-            headers.append(f'<div class="{cls}" data-lang="{html.escape(lang)}">{_web_band_html(project, "header", topic, "../assets/", lang)}</div>')
-            footers.append(f'<div class="{cls} footer-slot" data-lang="{html.escape(lang)}">{_web_band_html(project, "footer", topic, "../assets/", lang)}</div>')
-            variants.append(f'<div class="{cls}" data-lang="{html.escape(lang)}">{fragment}</div>')
+            header_html = _web_band_html(project, "header", topic, "../assets/", lang)
+            footer_html = _web_band_html(project, "footer", topic, "../assets/", lang)
+            if len(languages) <= 1:
+                titles.append(html.escape(topic_title))
+                headers.append(header_html)
+                footers.append(f'<div class="footer-slot">{footer_html}</div>')
+                variants.append(fragment)
+            else:
+                cls = "lang-content active" if lang == default_lang else "lang-content"
+                titles.append(f'<span class="{cls}" data-lang="{html.escape(lang)}">{html.escape(topic_title)}</span>')
+                headers.append(f'<div class="{cls}" data-lang="{html.escape(lang)}">{header_html}</div>')
+                footers.append(f'<div class="{cls} footer-slot" data-lang="{html.escape(lang)}">{footer_html}</div>')
+                variants.append(f'<div class="{cls}" data-lang="{html.escape(lang)}">{fragment}</div>')
         page_title = project.topic_title(topic, default_lang) if hasattr(project, "topic_title") else topic.title
         sidebar = nav_html(project, mapping, current_id=topic.id, prefix="", multilingual=True, toc_href="../sumario.html" if toc_enabled else None)
         page = f'''<!doctype html><html lang="{html.escape(default_lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(page_title)} — {title}</title>{_web_favicon(project, "../assets/")}<link rel="stylesheet" href="../style.css"></head>
@@ -1352,6 +1390,7 @@ def export_pdf(project, output_path: str, language=None, combined_languages: Opt
         painter.end()
 
 
+
 def _chm_language_code(lang: str) -> str:
     return {
         "pt-BR": "0x416 Portuguese (Brazilian)",
@@ -1362,21 +1401,172 @@ def _chm_language_code(lang: str) -> str:
     }.get(lang, "0x409 English (United States)")
 
 
-def _hhc_tree(project, mapping):
+def _chm_ascii_slug(text: str) -> str:
+    raw = unicodedata.normalize("NFKD", str(text or ""))
+    raw = raw.encode("ascii", "ignore").decode("ascii")
+    raw = raw.lower()
+    raw = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
+    return raw or "topico"
+
+
+def _chm_topic_file_map(project, language: str) -> Dict[str, str]:
+    mapping = {}
+    index = 0
+    for topic, _depth in ordered_topics(project):
+        if getattr(topic, "kind", "normal") == "toc":
+            continue
+        index += 1
+        title = project.topic_title(topic, language) if hasattr(project, "topic_title") else topic.title
+        mapping[topic.id] = f"{index:03d}-{_chm_ascii_slug(title)}.html"
+    return mapping
+
+
+def _chm_ascii_html(value: str) -> str:
+    # O HHCtrl interpreta vários arquivos UTF-8 como ANSI. Entidades numéricas
+    # mantêm acentos corretos sem depender da detecção de charset do viewer.
+    return str(value or "").encode("ascii", "xmlcharrefreplace").decode("ascii")
+
+
+def _chm_clean_fragment(fragment: str) -> str:
+    # Remove apenas propriedades internas do QTextDocument (-qt-*).
+    def clean_style(match):
+        quote = match.group(1)
+        style = match.group(2)
+        kept = []
+        for item in style.split(";"):
+            item = item.strip()
+            if not item:
+                continue
+            if item.lower().startswith("-qt-"):
+                continue
+            kept.append(item)
+        if not kept:
+            return ""
+        return f' style={quote}{"; ".join(kept)}{quote}'
+
+    fragment = re.sub(r"\sstyle=(['\"])(.*?)\1", clean_style, str(fragment or ""), flags=re.I | re.S)
+    return fragment
+
+
+def _chm_css(project) -> str:
+    # CSS simples e conservador para o motor legado usado pelo CHM.
+    family = str(project.meta.get("body_font_family", "Segoe UI"))
+    body_pt = float(project.meta.get("body_font_size_pt", 10.5))
+    h1_pt = max(16.0, float(project.meta.get("heading1_size_pt", 20.0)))
+    h2_pt = max(13.0, float(project.meta.get("heading2_size_pt", 16.0)))
+    h3_pt = max(11.0, float(project.meta.get("heading3_size_pt", 13.0)))
+    return f'''html, body {{
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #202428;
+}}
+body {{
+  font-family: "{family}", "Segoe UI", Tahoma, Arial, sans-serif;
+  font-size: {body_pt:.1f}pt;
+  line-height: 1.48;
+}}
+.topic {{
+  width: auto;
+  max-width: 940px;
+  margin: 0;
+  padding: 24px 30px 40px 30px;
+}}
+h1 {{
+  margin: 0 0 22px 0;
+  padding: 0 0 10px 0;
+  font-size: {h1_pt:.1f}pt;
+  line-height: 1.18;
+  color: #1f4f7d;
+  border-bottom: 1px solid #cfd7df;
+}}
+h2 {{ margin: 26px 0 10px 0; font-size: {h2_pt:.1f}pt; color: #263746; }}
+h3 {{ margin: 22px 0 8px 0; font-size: {h3_pt:.1f}pt; color: #354553; }}
+p {{ margin: 0 0 10px 0; }}
+ul, ol {{ margin-top: 7px; margin-bottom: 12px; }}
+a {{ color: #175f9f; }}
+img {{ max-width: 100%; height: auto; border: 0; }}
+table {{ border-collapse: collapse; max-width: 100%; margin: 10px 0 16px 0; }}
+td, th {{ border: 1px solid #cfd7df; padding: 6px 8px; vertical-align: top; }}
+pre {{
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid #d6dde5;
+  background: #f5f7f9;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 9.5pt;
+  white-space: pre;
+}}
+code {{ font-family: Consolas, "Courier New", monospace; }}
+'''
+
+
+def _chm_page(project, topic, language: str) -> str:
+    title_raw = project.topic_title(topic, language) if hasattr(project, "topic_title") else topic.title
+    content_raw = project.topic_html(topic, language) if hasattr(project, "topic_html") else topic.html
+    content = _chm_clean_fragment(body_fragment(content_raw))
+    content = replace_asset_urls(content, project, "../assets/")
+    title = html.escape(str(title_raw), quote=False)
+    page = f'''<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>{title}</title>
+<link rel="stylesheet" type="text/css" href="../chm.css">
+</head>
+<body>
+<div class="topic">
+<h1>{title}</h1>
+<div class="topic-body">
+{content}
+</div>
+</div>
+</body>
+</html>
+'''
+    return _chm_ascii_html(page)
+
+
+def _hhc_tree(project, mapping, language: str):
+    # Apenas a árvore nativa do CHM. Nenhum sumário é embutido nos tópicos.
     def branch(parent_id):
-        children = [t for t in project.children_of(parent_id) if getattr(t, "kind", "normal") != "toc"]
+        children = [
+            t for t in project.children_of(parent_id)
+            if getattr(t, "kind", "normal") != "toc" and t.id in mapping
+        ]
         if not children:
             return ""
         items = ["<UL>"]
         for t in children:
+            title = project.topic_title(t, language) if hasattr(project, "topic_title") else t.title
             items.append('<LI><OBJECT type="text/sitemap">')
-            items.append(f'<param name="Name" value="{html.escape(t.title, quote=True)}">')
+            items.append(f'<param name="Name" value="{html.escape(str(title), quote=True)}">')
             items.append(f'<param name="Local" value="topics/{mapping[t.id]}">')
             items.append('</OBJECT>')
             items.append(branch(t.id))
         items.append("</UL>")
         return "\n".join(items)
-    return '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN"><HTML><BODY>\n' + branch(None) + '\n</BODY></HTML>'
+    doc = '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN"><HTML><BODY>\n' + branch(None) + '\n</BODY></HTML>'
+    return _chm_ascii_html(doc)
+
+
+def _hhk_index(project, mapping, language: str):
+    # Índice plano para a aba Índice do visualizador CHM.
+    rows = []
+    for topic, _depth in ordered_topics(project):
+        if getattr(topic, "kind", "normal") == "toc" or topic.id not in mapping:
+            continue
+        title = project.topic_title(topic, language) if hasattr(project, "topic_title") else topic.title
+        rows.append((str(title), topic))
+    rows.sort(key=lambda pair: unicodedata.normalize("NFKD", pair[0]).casefold())
+    parts = ['<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN"><HTML><BODY><UL>']
+    for title, topic in rows:
+        parts.append('<LI><OBJECT type="text/sitemap">')
+        parts.append(f'<param name="Name" value="{html.escape(title, quote=True)}">')
+        parts.append(f'<param name="Local" value="topics/{mapping[topic.id]}">')
+        parts.append('</OBJECT>')
+    parts.append('</UL></BODY></HTML>')
+    return _chm_ascii_html("\n".join(parts))
 
 
 def find_hhc(configured: str = "") -> Optional[str]:
@@ -1386,7 +1576,13 @@ def find_hhc(configured: str = "") -> Optional[str]:
     which = shutil.which("hhc.exe") or shutil.which("hhc")
     if which:
         candidates.append(which)
+    pf86 = os.environ.get("ProgramFiles(x86)", "")
+    pf = os.environ.get("ProgramFiles", "")
+    local = os.environ.get("LOCALAPPDATA", "")
     candidates.extend([
+        os.path.join(pf86, "HTML Help Workshop", "hhc.exe") if pf86 else "",
+        os.path.join(pf, "HTML Help Workshop", "hhc.exe") if pf else "",
+        os.path.join(local, "Programs", "HTML Help Workshop", "hhc.exe") if local else "",
         r"C:\Program Files (x86)\HTML Help Workshop\hhc.exe",
         r"C:\Program Files\HTML Help Workshop\hhc.exe",
     ])
@@ -1397,25 +1593,42 @@ def find_hhc(configured: str = "") -> Optional[str]:
 
 
 def export_chm(project, output_path: str, hhc_path: str = "") -> Tuple[bool, str, str]:
+    # CHM usa seu próprio formato de navegação. Não reutilize WebHelp aqui.
     out = Path(output_path)
     project_dir = out.with_suffix("").parent / (out.stem + "_chm_project")
     if project_dir.exists():
         shutil.rmtree(project_dir)
-    export_html(project, str(project_dir), create_subfolder=False)
+    project_dir.mkdir(parents=True, exist_ok=True)
 
-    mapping = topic_file_map(project)
-    (project_dir / "contents.hhc").write_text(_hhc_tree(project, mapping), encoding="utf-8")
-    (project_dir / "index.hhk").write_text(_hhc_tree(project, mapping), encoding="utf-8")
+    topics_dir = project_dir / "topics"
+    assets_dir = project_dir / "assets"
+    topics_dir.mkdir(parents=True, exist_ok=True)
+    write_assets(project, assets_dir)
 
-    ordered = [(t, d) for t, d in ordered_topics(project) if getattr(t, "kind", "normal") != "toc"]
+    language = str(project.meta.get("language", "pt-BR"))
+    mapping = _chm_topic_file_map(project, language)
+    ordered = [
+        (t, d) for t, d in ordered_topics(project)
+        if getattr(t, "kind", "normal") != "toc" and t.id in mapping
+    ]
+
+    (project_dir / "chm.css").write_text(_chm_ascii_html(_chm_css(project)), encoding="ascii")
+    for topic, _depth in ordered:
+        (topics_dir / mapping[topic.id]).write_text(_chm_page(project, topic, language), encoding="ascii")
+
+    (project_dir / "contents.hhc").write_text(_hhc_tree(project, mapping, language), encoding="ascii")
+    (project_dir / "index.hhk").write_text(_hhk_index(project, mapping, language), encoding="ascii")
+
     first = ordered[0][0] if ordered else None
-    default_topic = f"topics/{mapping[first.id]}" if first else "index.html"
-    files = ["index.html", "style.css", "language.js", "contents.hhc", "index.hhk"]
-    if (project_dir / "sumario.html").exists():
-        files.append("sumario.html")
+    if first is None:
+        raise ValueError("O manual não possui tópicos para exportar em CHM.")
+    default_topic = f"topics/{mapping[first.id]}"
+
+    files = ["chm.css", "contents.hhc", "index.hhk"]
     files += [f"topics/{mapping[t.id]}" for t, _d in ordered]
     files += [f"assets/{asset_filename(a)}" for a in project.assets.values()]
-    hhp = f"""[OPTIONS]
+
+    hhp = f'''[OPTIONS]
 Compatibility=1.1 or later
 Compiled file={out.name}
 Contents file=contents.hhc
@@ -1423,17 +1636,20 @@ Index file=index.hhk
 Default topic={default_topic}
 Display compile progress=Yes
 Full-text search=Yes
-Language={_chm_language_code(project.meta.get('language', 'pt-BR'))}
+Language={_chm_language_code(language)}
 Title={project.meta.get('title', 'Manual')}
 
-[FILES]
-""" + "\n".join(files) + "\n"
+[FILES]\n''' + "\n".join(files) + "\n"
     hhp_path = project_dir / (out.stem + ".hhp")
-    hhp_path.write_text(hhp, encoding="utf-8")
+    hhp_path.write_bytes(hhp.encode("cp1252", "replace"))
 
     compiler = find_hhc(hhc_path)
     if not compiler:
-        return False, "HTML Help Workshop (hhc.exe) não encontrado. O projeto CHM foi gerado e pode ser compilado depois.", str(hhp_path)
+        return (
+            False,
+            "HTML Help Workshop (hhc.exe) não encontrado. O projeto CHM simplificado foi gerado e pode ser compilado depois.",
+            str(hhp_path),
+        )
 
     proc = subprocess.run(
         [compiler, str(hhp_path)],

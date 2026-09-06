@@ -111,8 +111,8 @@ DEFAULT_META = {
     "html_text": "#1f2933",
     "html_sidebar_background": "#f5f7fa",
     "html_topbar_background": "#ffffff",
-    "html_sidebar_width_px": 300,
-    "html_content_width_px": 900,
+    "html_sidebar_width_px": 340,
+    "html_content_width_px": 1040,
     "html_tree_lines": True,
     "html_tree_expand_default": True,
     "html_toc_enabled": True,
@@ -128,8 +128,6 @@ DEFAULT_META = {
     "html_intro_body_html": "<p>Selecione um tópico na árvore de navegação para começar.</p>",
     "html_custom_css": "",
     "html_manual_icon_asset": "",
-    "html_project_url": "https://github.com/Valdemir-DSW/manual_studio_qt5",
-    "html_show_project_link": True,
 
     # Capa e sumário específicos do PDF.
     "pdf_cover_background_type": "none",
@@ -468,6 +466,11 @@ class ManualProject:
         p = cls()
         p.format_version = max(8, int(data.get("format_version", 1)))
         p.meta.update(data.get("meta", {}))
+        # Campos antigos da v8/v9 eram do próprio Manual Studio, não do manual
+        # criado pelo usuário. Removê-los evita que o repositório do programa
+        # seja carregado/exportado como metadado de qualquer projeto.
+        p.meta.pop("html_project_url", None)
+        p.meta.pop("html_show_project_link", None)
         p.meta.setdefault("languages", [p.meta.get("language", "pt-BR")])
         p.topics = []
         for raw in data.get("topics", []):

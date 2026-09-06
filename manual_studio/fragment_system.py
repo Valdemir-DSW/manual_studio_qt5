@@ -94,8 +94,7 @@ STYLE_GROUPS: Dict[str, Tuple[str, Sequence[str]]] = {
             "html_toc_description", "html_intro_enabled", "html_intro_title",
             "html_intro_subtitle", "html_intro_show_logo", "html_intro_show_version",
             "html_intro_show_author", "html_intro_show_toc", "html_intro_body_html",
-            "html_custom_css", "html_manual_icon_asset", "html_project_url",
-            "html_show_project_link",
+            "html_custom_css", "html_manual_icon_asset",
         ),
     ),
     "pdf": (

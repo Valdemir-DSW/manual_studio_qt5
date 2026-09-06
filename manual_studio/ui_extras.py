@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPushButton, QSpinBox, QDoubleSpinBox, QTextEdit, QTextBrowser, QColorDialog, QVBoxLayout, QWidget, QTabWidget,
+    QScrollArea, QFrame, QApplication,
 )
 
 try:
@@ -458,7 +459,7 @@ class PdfCoverPreview(QWidget):
         self.project = project
         self.meta_getter = meta_getter
         self._dragging_bg = False
-        self.setMinimumSize(310, 430)
+        self.setMinimumSize(240, 320)
         self.setToolTip("Prévia da capa. Quando houver imagem de fundo, arraste sobre a folha para reposicioná-la.")
 
     def _page_rect(self):
@@ -630,7 +631,13 @@ class PdfSettingsDialog(QDialog):
         super().__init__(parent)
         self.project = project
         self.setWindowTitle("Configuração do PDF")
-        self.resize(1120, 760)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            area = screen.availableGeometry()
+            self.resize(max(760, min(1120, area.width() - 48)), max(520, min(740, area.height() - 72)))
+        else:
+            self.resize(1040, 700)
+        self.setMinimumSize(720, 500)
         self._cover_bg_path = None
         self._cover_logo_path = None
         self._cover_logo_use_main = False
@@ -687,7 +694,12 @@ class PdfSettingsDialog(QDialog):
         bgrow=QWidget(); bgh=QHBoxLayout(bgrow); bgh.setContentsMargins(0,0,0,0); bgbtn=QPushButton("Escolher imagem..."); bgbtn.clicked.connect(self._choose_cover_background); bgclear=QPushButton("Limpar"); bgclear.clicked.connect(self._clear_cover_background); bgh.addWidget(bgbtn); bgh.addWidget(bgclear)
         bf.addRow("Tipo:",self.cover_bg_type); bf.addRow("Cor 1:",self.cover_bg); bf.addRow("Cor 2:",self.cover_bg2); bf.addRow("Gradiente:",self.cover_gradient); bf.addRow("Imagem:",bgrow); bf.addRow("Encaixe:",self.cover_fit); bf.addRow("Escala:",self.cover_scale); bf.addRow("Posição X:",self.cover_x); bf.addRow("Posição Y:",self.cover_y); bf.addRow("Opacidade:",self.cover_opacity)
         cv.addWidget(bg); cv.addStretch(1)
-        cover_root.addWidget(controls,1)
+        controls_scroll = QScrollArea()
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setFrameShape(QFrame.NoFrame)
+        controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        controls_scroll.setWidget(controls)
+        cover_root.addWidget(controls_scroll,1)
         preview_box=QWidget(); pv=QVBoxLayout(preview_box); pv.setContentsMargins(8,0,0,0); pv.addWidget(QLabel("Prévia da capa")); self.cover_preview=PdfCoverPreview(project,self._cover_preview_meta,self); self.cover_preview.backgroundPositionChanged.connect(self._cover_dragged); pv.addWidget(self.cover_preview,1); cover_root.addWidget(preview_box,1)
         tabs.addTab(cover_tab,"Capa")
 
@@ -825,7 +837,6 @@ class _HtmlColorButton(QPushButton):
 
 class HtmlStyleDialog(QDialog):
     """Configuração do WebHelp com pré-compilação navegável inteiramente em RAM."""
-    PROJECT_URL = "https://github.com/Valdemir-DSW/manual_studio_qt5"
 
     def __init__(self, project, parent=None, meta=None, current_topic_id=None, current_language=None):
         super().__init__(parent)
@@ -835,7 +846,13 @@ class HtmlStyleDialog(QDialog):
         self.current_language = current_language or str(project.meta.get("language", "pt-BR"))
         self._icon_path = None
         self.setWindowTitle("HTML / WebHelp")
-        self.resize(1320, 820)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            area = screen.availableGeometry()
+            self.resize(max(860, min(1240, area.width() - 48)), max(560, min(760, area.height() - 72)))
+        else:
+            self.resize(1180, 720)
+        self.setMinimumSize(820, 520)
         root = QVBoxLayout(self)
         split = QHBoxLayout(); root.addLayout(split, 1)
 
@@ -848,17 +865,13 @@ class HtmlStyleDialog(QDialog):
         self.fg=_HtmlColorButton(str(self.meta.get("html_text","#1f2933")))
         self.side=_HtmlColorButton(str(self.meta.get("html_sidebar_background","#f5f7fa")))
         self.topbar=_HtmlColorButton(str(self.meta.get("html_topbar_background","#ffffff")))
-        self.sidebar=QSpinBox(); self.sidebar.setRange(180,520); self.sidebar.setSuffix(" px"); self.sidebar.setValue(int(self.meta.get("html_sidebar_width_px",300)))
-        self.content=QSpinBox(); self.content.setRange(520,1600); self.content.setSuffix(" px"); self.content.setValue(int(self.meta.get("html_content_width_px",900)))
+        self.sidebar=QSpinBox(); self.sidebar.setRange(240,560); self.sidebar.setSuffix(" px"); self.sidebar.setValue(int(self.meta.get("html_sidebar_width_px",340)))
+        self.content=QSpinBox(); self.content.setRange(560,1800); self.content.setSuffix(" px"); self.content.setValue(int(self.meta.get("html_content_width_px",1040)))
         self.tree_lines=QCheckBox("Mostrar linhas-guia na árvore"); self.tree_lines.setChecked(bool(self.meta.get("html_tree_lines",True)))
         self.tree_open=QCheckBox("Abrir ramos da árvore por padrão"); self.tree_open.setChecked(bool(self.meta.get("html_tree_expand_default",True)))
         vf.addRow("Cor de destaque:",self.accent); vf.addRow("Fundo:",self.bg); vf.addRow("Texto:",self.fg); vf.addRow("Fundo da árvore:",self.side); vf.addRow("Fundo da barra superior:",self.topbar); vf.addRow("Largura da árvore:",self.sidebar); vf.addRow("Largura máxima do conteúdo:",self.content); vf.addRow(self.tree_lines); vf.addRow(self.tree_open)
         self.preset=QComboBox(); self.preset.addItems(["Técnico claro","Cinza neutro","Escuro"]); preset_btn=QPushButton("Aplicar preset"); preset_btn.clicked.connect(self._preset); prow=QWidget(); ph=QHBoxLayout(prow); ph.setContentsMargins(0,0,0,0); ph.addWidget(self.preset); ph.addWidget(preset_btn); vf.addRow("Preset:",prow)
         iconrow=QWidget(); ih=QHBoxLayout(iconrow); ih.setContentsMargins(0,0,0,0); ib=QPushButton("Escolher ícone..."); ib.clicked.connect(self._choose_icon); ic=QPushButton("Usar logo"); ic.clicked.connect(self._use_logo_icon); ih.addWidget(ib); ih.addWidget(ic); vf.addRow("Ícone do manual:",iconrow)
-        repo=QLabel(f'<a href="{self.PROJECT_URL}">{self.PROJECT_URL}</a>'); repo.setOpenExternalLinks(True); repo.setTextInteractionFlags(Qt.TextBrowserInteraction); vf.addRow("Projeto:",repo)
-        self.project_url=QLineEdit(str(self.meta.get("html_project_url",self.PROJECT_URL) or self.PROJECT_URL)); self.project_url.setPlaceholderText(self.PROJECT_URL)
-        self.show_project_link=QCheckBox("Mostrar link do projeto/suporte na página inicial"); self.show_project_link.setChecked(bool(self.meta.get("html_show_project_link",True)))
-        vf.addRow("Link do projeto/suporte:",self.project_url); vf.addRow(self.show_project_link)
         tabs.addTab(visual,"Visual")
 
         structure=QWidget(); sf=QFormLayout(structure)
@@ -889,6 +902,7 @@ class HtmlStyleDialog(QDialog):
             self.preview_profile.setHttpCacheMaximumSize(32*1024*1024)
             self.preview_page=QWebEnginePage(self.preview_profile,self.preview)
             self.preview.setPage(self.preview_page)
+            self.preview.setZoomFactor(0.86)
             self.preview_handler = _MemoryPreviewSchemeHandler(self.preview) if _MemoryPreviewSchemeHandler is not None else None
             if self.preview_handler is not None:
                 try:
@@ -900,13 +914,13 @@ class HtmlStyleDialog(QDialog):
         else:
             self.preview=QTextBrowser(); self.preview.setOpenExternalLinks(False)
             self.preview_status.setText("Prévia compatível • instale PyQtWebEngine para usar o navegador Qt completo")
-        self.preview.setMinimumWidth(590); rl.addWidget(self.preview,1); split.addWidget(right,1)
+        self.preview.setMinimumWidth(500); rl.addWidget(self.preview,1); split.addWidget(right,1)
 
         self.preview_timer=QTimer(self); self.preview_timer.setSingleShot(True); self.preview_timer.setInterval(220); self.preview_timer.timeout.connect(self._refresh_preview)
         for w in (self.accent,self.bg,self.fg,self.side,self.topbar): w.colorChanged.connect(self._schedule_preview)
         for w in (self.sidebar,self.content): w.valueChanged.connect(self._schedule_preview)
-        for w in (self.tree_lines,self.tree_open,self.toc_enabled,self.intro_enabled,self.intro_show_logo,self.intro_show_version,self.intro_show_author,self.intro_show_toc,self.show_project_link): w.toggled.connect(self._schedule_preview)
-        for w in (self.toc_title,self.toc_desc,self.intro_title,self.intro_subtitle,self.project_url): w.textChanged.connect(self._schedule_preview)
+        for w in (self.tree_lines,self.tree_open,self.toc_enabled,self.intro_enabled,self.intro_show_logo,self.intro_show_version,self.intro_show_author,self.intro_show_toc): w.toggled.connect(self._schedule_preview)
+        for w in (self.toc_title,self.toc_desc,self.intro_title,self.intro_subtitle): w.textChanged.connect(self._schedule_preview)
         self.intro_body.textChanged.connect(self._schedule_preview); self.css.textChanged.connect(self._schedule_preview)
         self._refresh_preview()
 
@@ -920,8 +934,20 @@ class HtmlStyleDialog(QDialog):
         self._icon_path="__logo__"; self._schedule_preview()
 
     def _preset(self):
-        name=self.preset.currentText(); vals=("#3b82f6","#111418","#edf2f7","#191d22","#111418") if name=="Escuro" else (("#4b6478","#ffffff","#252a30","#eceff2","#ffffff") if name=="Cinza neutro" else ("#1769aa","#ffffff","#1f2933","#f5f7fa","#ffffff"))
-        for btn,val in zip((self.accent,self.bg,self.fg,self.side,self.topbar),vals): btn.setValue(val)
+        name = self.preset.currentText()
+        if name == "Escuro":
+            vals = ("#4b8bd8", "#111418", "#edf2f7", "#191d22", "#111418")
+            sidebar, content = 340, 1040
+        elif name == "Cinza neutro":
+            vals = ("#4b6478", "#ffffff", "#252a30", "#eef1f4", "#ffffff")
+            sidebar, content = 350, 1000
+        else:
+            vals = ("#2f5e91", "#ffffff", "#1f2933", "#f3f6f9", "#ffffff")
+            sidebar, content = 340, 1040
+        for btn, val in zip((self.accent, self.bg, self.fg, self.side, self.topbar), vals):
+            btn.setValue(val)
+        self.sidebar.setValue(sidebar)
+        self.content.setValue(content)
 
     def _preview_meta(self):
         m=dict(self.meta)
@@ -930,7 +956,7 @@ class HtmlStyleDialog(QDialog):
             "html_sidebar_width_px":self.sidebar.value(), "html_content_width_px":self.content.value(), "html_tree_lines":self.tree_lines.isChecked(), "html_tree_expand_default":self.tree_open.isChecked(),
             "html_toc_enabled":self.toc_enabled.isChecked(), "html_toc_title":self.toc_title.text().strip() or "Sumário", "html_toc_description":self.toc_desc.text().strip(),
             "html_intro_enabled":self.intro_enabled.isChecked(), "html_intro_title":self.intro_title.text().strip(), "html_intro_subtitle":self.intro_subtitle.text().strip(), "html_intro_show_logo":self.intro_show_logo.isChecked(), "html_intro_show_version":self.intro_show_version.isChecked(), "html_intro_show_author":self.intro_show_author.isChecked(), "html_intro_show_toc":self.intro_show_toc.isChecked(), "html_intro_body_html":self.intro_body.toHtml(),
-            "html_custom_css":self.css.toPlainText(), "html_project_url":self.project_url.text().strip() or self.PROJECT_URL, "html_show_project_link":self.show_project_link.isChecked(),
+            "html_custom_css":self.css.toPlainText(),
         })
         return m
 
